@@ -35,6 +35,7 @@ const Scriptures = (function () {
     const REQUEST_STATUS_ERROR = 400;
     const TAG_VOLUME_HEADER = "h5";
     const URL_BOOKS = "https://scriptures.byu.edu/mapscrip/model/books.php";
+    const URL_SCRIPTURES = "https://scriptures.byu.edu/mapscrip/mapgetscrip.php";
     const URL_VOLUMES = "https://scriptures.byu.edu/mapscrip/model/volumes.php";
 
     /*------------------------------------------------------------------------
@@ -51,8 +52,11 @@ const Scriptures = (function () {
     let booksGrid;
     let booksGridContent;
     let cacheBooks;
-    let chaptersContent;
+    let chaptersGrid;
     let chaptersGridContent;
+    let encodedScripturesUrlParameters;
+    let getScripturesCallback;
+    let getScripturesFailure;
     let htmlAnchor;
     let htmlDiv;
     let htmlElement;
@@ -67,13 +71,13 @@ const Scriptures = (function () {
     /*------------------------------------------------------------------------
      *              PRIVATE METHOD DECLARATIONS
      */
-    ajax = function (url, successCallback, failureCallback) {
+    ajax = function (url, successCallback, failureCallback, skipJsonParse) {
         let request = new XMLHttpRequest();
         request.open(REQUEST_GET, url, true);
 
         request.onload = function () {
             if (request.status >= REQUEST_STATUS_OK && request.status < REQUEST_STATUS_ERROR) {
-                let data = JSON.parse(request.response);
+                let data = skipJsonParse ? request.response : JSON.parse(request.response);
 
                 if (typeof successCallback === "function") {
                     successCallback(data);
@@ -143,7 +147,7 @@ const Scriptures = (function () {
         }
     };
 
-    chaptersContent = function (book) {
+    chaptersGrid = function (book) {
         return htmlDiv({
             classKey: CLASS_VOLUME,
             content: htmlElement(TAG_VOLUME_HEADER, book.fullName)
@@ -157,7 +161,7 @@ const Scriptures = (function () {
         let gridContent = "";
         let chapter = 1;
 
-        while (chapter < book.numChapters) {
+        while (chapter <= book.numChapters) {
             gridContent += htmlLink({
                 classKey: `${CLASS_BUTTON} ${CLASS_CHAPTER}`,
                 id: chapter,
@@ -169,6 +173,32 @@ const Scriptures = (function () {
         }
 
         return gridContent;
+    };
+
+    encodedScripturesUrlParameters = function (bookId, chapter, verses, isJst) {
+        if (bookId !== undefined && chapter !== undefined) {
+            let options = "";
+
+            if (verses !== undefined) {
+                options += verses;
+            }
+
+            if (isJst !== undefined) {
+                options += "&jst=JST";
+            }
+
+            return `${URL_SCRIPTURES}?book=${bookId}&chap=${chapter}&verses${options}`;
+        }
+    };
+
+    getScripturesCallback = function (chapterHtml) {
+        document.getElementById(DIV_SCRIPTURES).innerHTML = chapterHtml;
+
+        // NEEDSWORK: setupMarkers();
+    };
+
+    getScripturesFailure = function () {
+        console.log("Unable to retrieve chapter content from server.");
     };
 
     htmlAnchor = function (volume) {
@@ -255,13 +285,13 @@ const Scriptures = (function () {
         } else {
             document.getElementById(DIV_SCRIPTURES).innerHTML = htmlDiv({
                 id: DIV_SCRIPTURES_NAVIGATOR,
-                content: chaptersContent(book)
+                content: chaptersGrid(book)
             });
         }
     };
 
     navigateChapter = function (bookId, chapter) {
-        console.log("navigateChapter " + bookId + ", " + chapter);
+        ajax(encodedScripturesUrlParameters(bookId, chapter), getScripturesCallback, getScripturesFailure, true);
     };
 
     navigateHome = function (volumeId) {
