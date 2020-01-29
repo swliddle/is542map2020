@@ -9,13 +9,14 @@
 /*jslint
     browser: true
     long: true */
-/*global console, XMLHttpRequest */
+/*global console, google, map, XMLHttpRequest */
 /*property
-    books, classKey, content, exec, forEach, fullName, getAttribute,
-    getElementById, gridName, hash, href, id, init, innerHTML, length, log,
+    Animation, DROP, Marker, animation, books, classKey, clearTimeout, content,
+    exec, forEach, fullName, getAttribute, getElementById, google, gridName,
+    hash, href, id, init, innerHTML, lat, length, lng, log, map, maps,
     maxBookId, minBookId, numChapters, onHashChanged, onerror, onload, open,
-    parse, push, querySelectorAll, response, send, setMap, slice, split, status,
-    tocName
+    parse, position, push, querySelectorAll, response, send, setMap, setTimeout,
+    slice, split, status, title, tocName
 */
 
 const Scriptures = (function () {
@@ -36,6 +37,7 @@ const Scriptures = (function () {
     const INDEX_LONGITUDE = 4;
     const INDEX_PLACENAME = 2;
     const LAT_LON_PARSER = /\((.*),'(.*)',(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*),'(.*)'\)/;
+    const MAX_RETRY_DELAY = 5000;
     const REQUEST_GET = "GET";
     const REQUEST_STATUS_OK = 200;
     const REQUEST_STATUS_ERROR = 400;
@@ -49,6 +51,7 @@ const Scriptures = (function () {
      */
     let books;
     let gmMarkers = [];
+    let retryDelay = 500;
     let volumes;
 
     /*------------------------------------------------------------------------
@@ -87,8 +90,15 @@ const Scriptures = (function () {
     addMarker = function (placename, latitude, longitude) {
         // NEEDSWORK: check to see if we already have this latitude/longitude
         //    in the gmMarkers array.
-        // NEEDSWORK: create the marker and append it to gmMarkers.
-        console.log(placename, latitude, longitude);
+
+        let marker = new google.maps.Marker({
+            position: {lat: Number(latitude), lng: Number(longitude)},
+            map,
+            title: placename,
+            animation: google.maps.Animation.DROP
+        });
+
+        gmMarkers.push(marker);
     };
 
     ajax = function (url, successCallback, failureCallback, skipJsonParse) {
@@ -422,6 +432,18 @@ const Scriptures = (function () {
     };
 
     setupMarkers = function () {
+        if (window.google === undefined) {
+            let retryId = window.setTimeout(setupMarkers, retryDelay);
+
+            retryDelay += retryDelay;
+
+            if (retryDelay > MAX_RETRY_DELAY) {
+                window.clearTimeout(retryId);
+            }
+
+            return;
+        }
+
         if (gmMarkers.length > 0) {
             clearMarkers();
         }
