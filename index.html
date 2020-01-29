@@ -30,7 +30,7 @@
         }
 
         ready(function () {
-            Scriptures.init(() => { console.log("Initialization of Scriptures is finished."); });
+            Scriptures.init(() => { Scriptures.onHashChanged(); });
             window.addEventListener("hashchange", Scriptures.onHashChanged);
         });
     </script>

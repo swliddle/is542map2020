@@ -14,7 +14,7 @@
     books, classKey, content, forEach, fullName, getElementById, gridName, hash,
     href, id, init, innerHTML, length, log, maxBookId, minBookId, numChapters,
     onHashChanged, onerror, onload, open, parse, push, response, send, slice,
-    split, status
+    split, status, tocName
 */
 
 const Scriptures = (function () {
@@ -65,7 +65,10 @@ const Scriptures = (function () {
     let navigateBook;
     let navigateChapter;
     let navigateHome;
+    let nextChapter;
     let onHashChanged;
+    let previousChapter;
+    let titleForBookChapter;
     let volumesGridContent;
 
     /*------------------------------------------------------------------------
@@ -77,7 +80,11 @@ const Scriptures = (function () {
 
         request.onload = function () {
             if (request.status >= REQUEST_STATUS_OK && request.status < REQUEST_STATUS_ERROR) {
-                let data = skipJsonParse ? request.response : JSON.parse(request.response);
+                let data = (
+                    skipJsonParse
+                    ? request.response
+                    : JSON.parse(request.response)
+                );
 
                 if (typeof successCallback === "function") {
                     successCallback(data);
@@ -301,6 +308,39 @@ const Scriptures = (function () {
         });
     };
 
+    // Book ID and chapter must be integers
+    // Returns undefined if there is no next chapter
+    // Otherwise returns an array with the next book ID, chapter, and title
+    nextChapter = function (bookId, chapter) {
+        let book = books[bookId];
+
+        if (book !== undefined) {
+            if (chapter < book.numChapters) {
+                return [
+                    bookId,
+                    chapter + 1,
+                    titleForBookChapter(book, chapter + 1)
+                ];
+            }
+
+            let nextBook = books[bookId + 1];
+
+            if (nextBook !== undefined) {
+                let nextChapterValue = 0;
+
+                if (nextBook.numChapters > 0) {
+                    nextChapterValue = 1;
+                }
+
+                return [
+                    nextBook.id,
+                    nextChapterValue,
+                    titleForBookChapter(nextBook, nextChapterValue)
+                ];
+            }
+        }
+    };
+
     onHashChanged = function () {
         let ids = [];
 
@@ -336,6 +376,33 @@ const Scriptures = (function () {
                     }
                 }
             }
+        }
+    };
+
+    // Book ID and chapter must be integers
+    // Returns undefined if there is no previous chapter
+    // Otherwise returns an array with the previous book ID, chapter, and title
+    previousChapter = function (bookId, chapter) {
+        // Get the book for the given bookId.  If it exists (i.e. it’s not undefined):
+        //     If chapter > 1, it’s the easy case.  Just return same bookId,
+        //         chapter - 1, and the title string for that book/chapter combo.
+        //     Otherwise we need to see if there’s a previous book:
+        //         Get the book for bookId - 1.  If it exists:
+        //             Return bookId - 1, the last chapter of that book, and the
+        //                     title string for that book/chapter combo.
+        // If we didn’t already return a 3-element array of bookId/chapter/title,
+        //     at this point just drop through to the bottom of the function.  We’ll
+        //     return undefined by default, meaning there is no previous chapter.
+        console.log(bookId, chapter);
+    };
+
+    titleForBookChapter = function (book, chapter) {
+        if (book !== undefined) {
+            if (chapter > 0) {
+                return `${book.tocName} ${chapter}`;
+            }
+
+            return book.tocName;
         }
     };
 
