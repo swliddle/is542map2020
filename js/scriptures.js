@@ -81,6 +81,7 @@ const Scriptures = (function () {
     let onHashChanged;
     let previousChapter;
     let setupMarkers;
+    let showLocation;
     let titleForBookChapter;
     let volumesGridContent;
 
@@ -466,6 +467,11 @@ const Scriptures = (function () {
         });
     };
 
+    showLocation = function (id, placename, latitude) {
+        console.log(id, placename, latitude);
+        console.log(arguments);
+    };
+
     titleForBookChapter = function (book, chapter) {
         if (book !== undefined) {
             if (chapter > 0) {
@@ -498,6 +504,7 @@ const Scriptures = (function () {
      */
     return {
         init,
-        onHashChanged
+        onHashChanged,
+        showLocation
     };
 }());
