@@ -11,12 +11,13 @@
     long: true */
 /*global console, google, map, XMLHttpRequest */
 /*property
-    Animation, DROP, Marker, animation, books, classKey, clearTimeout, content,
-    exec, forEach, fullName, getAttribute, getElementById, google, gridName,
-    hash, href, id, init, innerHTML, lat, length, lng, log, map, maps,
-    maxBookId, minBookId, numChapters, onHashChanged, onerror, onload, open,
-    parse, position, push, querySelectorAll, response, send, setMap, setTimeout,
-    slice, split, status, title, tocName
+    Animation, DROP, Marker, animation, books, changeHash, classKey,
+    clearTimeout, content, exec, forEach, fullName, getAttribute,
+    getElementById, google, gridName, hash, href, id, init, innerHTML, lat,
+    length, lng, log, map, maps, maxBookId, minBookId, numChapters,
+    onHashChanged, onclick, onerror, onload, open, parse, position, push,
+    querySelectorAll, response, send, setMap, setTimeout, showLocation, slice,
+    split, status, title, tocName
 */
 
 const Scriptures = (function () {
@@ -30,6 +31,7 @@ const Scriptures = (function () {
     const CLASS_BUTTON = "btn";
     const CLASS_CHAPTER = "chapter";
     const CLASS_VOLUME = "volume";
+    const DIV_BREADCRUMBS = "crumbs";
     const DIV_SCRIPTURES_NAVIGATOR = "scripnav";
     const DIV_SCRIPTURES = "scriptures";
     const INDEX_FLAG = 11;
@@ -41,7 +43,10 @@ const Scriptures = (function () {
     const REQUEST_GET = "GET";
     const REQUEST_STATUS_OK = 200;
     const REQUEST_STATUS_ERROR = 400;
+    const TAG_LIST_ITEM = "li";
+    const TAG_UNORDERED_LIST = "ul";
     const TAG_VOLUME_HEADER = "h5";
+    const TEXT_TOP_LEVEL = "The Scriptures";
     const URL_BOOKS = "https://scriptures.byu.edu/mapscrip/model/books.php";
     const URL_SCRIPTURES = "https://scriptures.byu.edu/mapscrip/mapgetscrip.php";
     const URL_VOLUMES = "https://scriptures.byu.edu/mapscrip/model/volumes.php";
@@ -51,6 +56,7 @@ const Scriptures = (function () {
      */
     let books;
     let gmMarkers = [];
+    let requestedBreadcrumbs;
     let retryDelay = 500;
     let volumes;
 
@@ -62,7 +68,9 @@ const Scriptures = (function () {
     let bookChapterValid;
     let booksGrid;
     let booksGridContent;
+    let breadcrumbs;
     let cacheBooks;
+    let changeHash;
     let chaptersGrid;
     let chaptersGridContent;
     let clearMarkers;
@@ -72,6 +80,7 @@ const Scriptures = (function () {
     let htmlAnchor;
     let htmlDiv;
     let htmlElement;
+    let htmlHashLink;
     let htmlLink;
     let init;
     let navigateBook;
@@ -83,6 +92,7 @@ const Scriptures = (function () {
     let setupMarkers;
     let showLocation;
     let titleForBookChapter;
+    let volumeForId;
     let volumesGridContent;
 
     /*------------------------------------------------------------------------
@@ -164,6 +174,31 @@ const Scriptures = (function () {
         return gridContent;
     };
 
+    breadcrumbs = function (volume, book, chapter) {
+        let crumbs;
+
+        if (volume === undefined) {
+            crumbs = htmlElement(TAG_LIST_ITEM, TEXT_TOP_LEVEL);
+        } else {
+            crumbs = htmlElement(TAG_LIST_ITEM, htmlHashLink("", TEXT_TOP_LEVEL));
+
+            if (book === undefined) {
+                crumbs += htmlElement(TAG_LIST_ITEM, volume.fullName);
+            } else {
+                crumbs += htmlElement(TAG_LIST_ITEM, htmlHashLink(`${volume.id}`, volume.fullName));
+
+                if (chapter === undefined || chapter <= 0) {
+                    crumbs += htmlElement(TAG_LIST_ITEM, book.tocName);
+                } else {
+                    crumbs += htmlElement(TAG_LIST_ITEM, htmlHashLink(`${volume.id},${book.id}`, book.tocName));
+                    crumbs += htmlElement(TAG_LIST_ITEM, chapter);
+                }
+            }
+        }
+
+        return htmlElement(TAG_UNORDERED_LIST, crumbs);
+    };
+
     cacheBooks = function (onInitializedCallback) {
         volumes.forEach(function (volume) {
             let volumeBooks = [];
@@ -180,6 +215,24 @@ const Scriptures = (function () {
         if (typeof onInitializedCallback === "function") {
             onInitializedCallback();
         }
+    };
+
+    changeHash = function (volumeId, bookId, chapter) {
+        let newHash = "";
+
+        if (volumeId !== undefined) {
+            newHash += volumeId;
+
+            if (bookId !== undefined) {
+                newHash += `:${bookId}`;
+
+                if (chapter !== undefined) {
+                    newHash += `:${chapter}`;
+                }
+            }
+        }
+
+        location.hash = newHash;
     };
 
     chaptersGrid = function (book) {
@@ -236,6 +289,7 @@ const Scriptures = (function () {
 
     getScripturesCallback = function (chapterHtml) {
         document.getElementById(DIV_SCRIPTURES).innerHTML = chapterHtml;
+        document.getElementById(DIV_BREADCRUMBS).innerHTML = requestedBreadcrumbs;
 
         setupMarkers();
     };
@@ -272,11 +326,20 @@ const Scriptures = (function () {
         return `<${tagName}>${content}</${tagName}>`;
     };
 
+    htmlHashLink = function (hashArguments, content) {
+        return htmlLink({
+            content,
+            href: "javascript:void(0)",
+            onclick: `Scriptures.changeHash(${hashArguments})`
+        });
+    };
+
     htmlLink = function (parameters) {
         let classString = "";
         let contentString = "";
         let hrefString = "";
         let idString = "";
+        let onclickString = "";
 
         if (parameters.classKey !== undefined) {
             classString = ` class="${parameters.classKey}"`;
@@ -294,7 +357,11 @@ const Scriptures = (function () {
             idString = ` id="${parameters.id}"`;
         }
 
-        return `<a${idString}${classString}${hrefString}>${contentString}</a>`;
+        if (parameters.onclick !== undefined) {
+            onclickString = ` onclick="${parameters.onclick}"`;
+        }
+
+        return `<a${idString}${classString}${hrefString}${onclickString}>${contentString}</a>`;
     };
 
     init = function (onInitializedCallback) {
@@ -322,18 +389,32 @@ const Scriptures = (function () {
 
     navigateBook = function (bookId) {
         let book = books[bookId];
+        let volume;
 
         if (book.numChapters <= 1) {
             navigateChapter(book.id, book.numChapters);
         } else {
+            if (book !== undefined) {
+                volume = volumeForId(book.parentBookId);
+            }
+
             document.getElementById(DIV_SCRIPTURES).innerHTML = htmlDiv({
                 id: DIV_SCRIPTURES_NAVIGATOR,
                 content: chaptersGrid(book)
             });
+            document.getElementById(DIV_BREADCRUMBS).innerHTML = breadcrumbs(volume, book);
         }
     };
 
     navigateChapter = function (bookId, chapter) {
+        let book = books[bookId];
+
+        if (book !== undefined) {
+            let volume = volumeForId(book.parentBookId);
+
+            requestedBreadcrumbs = breadcrumbs(volume, book, chapter);
+        }
+
         ajax(encodedScripturesUrlParameters(bookId, chapter), getScripturesCallback, getScripturesFailure, true);
     };
 
@@ -342,6 +423,7 @@ const Scriptures = (function () {
             id: DIV_SCRIPTURES_NAVIGATOR,
             content: volumesGridContent(volumeId)
         });
+        document.getElementById(DIV_BREADCRUMBS).innerHTML = breadcrumbs(volumeForId(volumeId));
     };
 
     // Book ID and chapter must be integers
@@ -469,7 +551,6 @@ const Scriptures = (function () {
 
     showLocation = function (id, placename, latitude) {
         console.log(id, placename, latitude);
-        console.log(arguments);
     };
 
     titleForBookChapter = function (book, chapter) {
@@ -479,6 +560,12 @@ const Scriptures = (function () {
             }
 
             return book.tocName;
+        }
+    };
+
+    volumeForId = function (volumeId) {
+        if (volumeId !== undefined && volumeId > 0 && volumeId <= volumes.length) {
+            return volumes[volumeId - 1];
         }
     };
 
@@ -503,6 +590,7 @@ const Scriptures = (function () {
      *              PUBLIC METHODS
      */
     return {
+        changeHash,
         init,
         onHashChanged,
         showLocation
